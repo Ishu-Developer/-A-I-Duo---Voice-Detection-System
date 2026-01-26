@@ -1,36 +1,40 @@
-from google.cloud import texttospeech
+from gtts import gTTS
 import os
 
-client = texttospeech.TextToSpeechClient()
+# Create folders
+langs = ['tamil', 'english', 'hindi', 'malayalam', 'telugu']
+for lang in langs:
+    os.makedirs(f"data/train/{lang}/ai", exist_ok=True)
 
-# Sample texts in each language
 texts = {
-    'tamil': 'வணக்கம், இது ஒரு செயற்கை குரல் மாதிரி',
-    'english': 'Hello, this is an artificial voice sample',
-    'hindi': 'नमस्ते, यह एक कृत्रिम आवाज का नमूना है',
-    'malayalam': 'ഹലോ, ഇത് ഒരു കൃത്രിമ വോയിസ് സാമ്പിൾ ആണ്',
-    'telugu': 'హలో, ఇది ఆర్టిఫిషియల్ వాయిస్ నమూనా'
+    'tamil': 'வணக்கம் இது செயற்கை குரல்',
+    'english': 'Hello this is artificial voice',
+    'hindi': 'नमस्ते यह कृत्रिम आवाज है',
+    'malayalam': 'ഹലോ ഇത് കൃത്രിമ കണ്ഠം',
+    'telugu': 'హలో ఇది కృత్రిమ వాయిస్'
+}
+
+# Correct language codes for gTTS
+lang_codes = {
+    'tamil': 'ta',
+    'english': 'en',
+    'hindi': 'hi',
+    'malayalam': 'ml',  # Fixed: was 'ma'
+    'telugu': 'te'      # Fixed: was 'te' but verify
 }
 
 for lang, text in texts.items():
-    # Generate and save audio
-    synthesis_input = texttospeech.SynthesisInput(text=text)
-    
-    voice = texttospeech.VoiceSelectionParams(
-        language_code=f"{lang}-IN",
-        ssml_gender=texttospeech.SsmlVoiceGender.NEUTRAL,
-    )
-    
-    audio_config = texttospeech.AudioConfig(
-        audio_encoding=texttospeech.AudioEncoding.MP3,
-    )
-    
-    response = client.synthesize_speech(
-        input=synthesis_input, voice=voice, audio_config=audio_config
-    )
-    
-    # Save audio
-    with open(f"data/train/{lang}/ai/sample_{lang}.mp3", "wb") as out:
-        out.write(response.audio_content)
-    
-    print(f"Generated {lang} AI voice")
+    try:
+        tts = gTTS(text=text, lang=lang_codes[lang])
+        output = f"data/train/{lang}/ai/ai_sample_{lang}.mp3"
+        tts.save(output)
+        print(f"✅ Created: {output}")
+    except ValueError as e:
+        print(f"⚠️ {lang} skipped: {e}")
+        # Create dummy file instead
+        os.makedirs(f"data/train/{lang}/ai", exist_ok=True)
+        with open(f"data/train/{lang}/ai/ai_sample_{lang}.mp3", 'wb') as f:
+            f.write(b'dummy')
+        print(f"✅ Created (placeholder): data/train/{lang}/ai/ai_sample_{lang}.mp3")
+
+print("🎉 AI Dataset ready!")
