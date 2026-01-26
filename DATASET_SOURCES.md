@@ -3,7 +3,7 @@ Voice Detection Dataset Sources
 ## Project: A-I Duo - Voice Detection System
 Team Members: Ishu & Adarsh  
 Target Languages: Tamil, English, Hindi, Malayalam, Telugu  
-Total Target Samples: 100-200 per category per language (AI + Human)
+Total Target Samples: 20-50 per category per language (AI + Human)
 
 📥 DATASET SOURCES
 
