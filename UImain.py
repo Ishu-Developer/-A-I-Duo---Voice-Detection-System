@@ -1,8 +1,7 @@
-# -*- coding: utf-8 -*-
 import sys
 sys.path.insert(0, 'src')
 
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, HTTPException, Header, UploadFile, File
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import uvicorn
@@ -21,6 +20,7 @@ warnings.filterwarnings('ignore')
 MODEL_PATH = "models/voice_detector.pkl"
 VALID_API_KEY = "sk_test_voice_detection_123456789"
 SUPPORTED_LANGUAGES = ["Tamil", "English", "Hindi", "Malayalam", "Telugu"]
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
 # ============================================
 # LOAD MODEL
@@ -122,7 +122,12 @@ def root():
     return {
         "message": "A-I Duo Voice Detection API",
         "version": "1.0.0",
-        "docs": "http://localhost:8000/docs"
+        "docs": "http://localhost:8000/docs",
+        "endpoints": {
+            "health": "GET /health",
+            "detect_with_base64": "POST /api/voice-detection",
+            "detect_with_file": "POST /api/voice-detection-file"
+        }
     }
 
 @app.get("/health")
@@ -140,6 +145,8 @@ def detect_voice(
     x_api_key: str = Header(None)
 ):
     """
+    METHOD 1: Base64 Encoded Audio
+    
     Detect if audio is AI-generated or Human voice
     
     Parameters:
@@ -186,7 +193,105 @@ def detect_voice(
         features = extract_features(audio_bytes)
         
         # Make prediction
-        prediction = model.predict(features)
+        prediction = model.predict(features)[0]
+        confidence = float(model.predict_proba(features).max())
+        
+        # Map prediction
+        prediction_label = "AI_GENERATED" if prediction == 1 else "HUMAN"
+        
+        # Calculate processing time
+        processing_time_ms = (time.time() - start_time) * 1000
+        
+        return VoiceDetectionResponse(
+            status="success",
+            prediction=prediction_label,
+            confidence=confidence,
+            processing_time_ms=processing_time_ms,
+            request_id=request_id
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Processing failed: {str(e)}"
+        )
+
+@app.post("/api/voice-detection-file", response_model=VoiceDetectionResponse)
+async def detect_voice_file(
+    file: UploadFile = File(...),
+    language: str = "Tamil",
+    x_api_key: str = Header(None)
+):
+    """
+    METHOD 2: Direct File Upload
+    
+    Upload MP3/WAV/OGG file directly for detection
+    
+    Parameters:
+    - file: Audio file (MP3, WAV, OGG)
+    - language: Tamil, English, Hindi, Malayalam, Telugu
+    - x-api-key: API authentication key
+    
+    Returns:
+    - prediction: AI_GENERATED or HUMAN
+    - confidence: 0.0 to 1.0
+    - processing_time_ms: Processing duration
+    """
+    
+    import time
+    start_time = time.time()
+    request_id = base64.b64encode(os.urandom(12)).decode('utf-8')
+    
+    try:
+        # Validate API Key
+        if x_api_key != VALID_API_KEY:
+            raise HTTPException(
+                status_code=403,
+                detail="Invalid API Key"
+            )
+        
+        # Validate language
+        if language not in SUPPORTED_LANGUAGES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Language not supported. Use: {SUPPORTED_LANGUAGES}"
+            )
+        
+        # Validate file size
+        file_size = 0
+        audio_bytes = b""
+        
+        while chunk := await file.read(1024):
+            file_size += len(chunk)
+            if file_size > MAX_FILE_SIZE:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File too large. Max size: 10MB"
+                )
+            audio_bytes += chunk
+        
+        if not audio_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail="Empty file received"
+            )
+        
+        # Validate file extension
+        filename = file.filename.lower()
+        valid_extensions = ['.mp3', '.wav', '.ogg', '.flac', '.m4a']
+        if not any(filename.endswith(ext) for ext in valid_extensions):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid file format. Supported: {valid_extensions}"
+            )
+        
+        # Extract features
+        features = extract_features(audio_bytes)
+        
+        # Make prediction
+        prediction = model.predict(features)[0]
         confidence = float(model.predict_proba(features).max())
         
         # Map prediction
@@ -223,6 +328,12 @@ async def startup_event():
     print(f"✅ Model loaded: {MODEL_PATH}")
     print(f"✅ Supported languages: {', '.join(SUPPORTED_LANGUAGES)}")
     print(f"✅ API Key: {VALID_API_KEY}")
+    print("="*60)
+    print("\n📍 ENDPOINTS:")
+    print("  1. Base64 Method:  POST /api/voice-detection")
+    print("  2. File Upload:    POST /api/voice-detection-file")
+    print("  3. Health Check:   GET /health")
+    print("  4. Swagger UI:     http://localhost:8000/docs")
     print("="*60 + "\n")
 
 @app.on_event("shutdown")

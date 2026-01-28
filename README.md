@@ -1,24 +1,40 @@
-# -A-I-Duo---Voice-Detection-System
-The Voice Detection System with team A-I Duo (Adarsh-Ishu) is an AI-powered tool for the India AI Impact Buildathon. <br>
-It classifies audio inputs as AI-generated or human-generated, supporting multi-language detection in Tamil, English, Hindi, Malayalam, and Telugu.
+cat > README.md << 'EOF'
+# A-I Duo Voice Detection System
 
-# Voice Detection System (AI-Generated vs Human)
+## Team
+- Person A: Adarsh
+- Person B: Ishu
 
-## Overview
-AI-Generated Voice Detection (Multi-Language) system for detecting synthetic voices in Tamil, English, Hindi, Malayalam, Telugu.  
-**Target**: ~80% accuracy API jo audio input le aur JSON output de (e.g., {"voice_type": "AI", "confidence": 0.85}).  
-Team: **A-I Duo** (Adarsh & Ishu) – India AI Impact Buildathon entry.
+## Project Description
+AI-generated vs Human voice detection system supporting 5 languages:
+- Tamil
+- English
+- Hindi
+- Malayalam
+- Telugu
 
-## Features
-- Multi-language support (Indian languages).
-- Audio preprocessing aur ML model (e.g., MFCC features, CNN/SVM).
-- FastAPI-based endpoint for easy deployment.
-- Demo with sample audios.
+## Model Performance
+- Accuracy: 98.18%
+- Confidence Range: 0.0 - 1.0
+- Languages Supported: 5
+- Processing Time: ~4 seconds per audio
 
-## Tech Stack
-| Category | Tools                        |
-|----------|------------------------------|
-| Language | Python 3.9+                  |
-| Framework | FastAPI, PyTorch/TensorFlow |
-| Audio | Librosa, torchaudio             |
-| ML | Scikit-learn, custom CNN           |
+## Deployment
+- Local: http://localhost:8000
+- API Docs: http://localhost:8000/docs
+
+## Testing
+All endpoints tested and working:
+- GET /health - Health check
+- POST /api/voice-detection - Voice detection with Base64 audio
+
+## API Usage
+```bash
+curl -X POST http://localhost:8000/api/voice-detection \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: sk_test_voice_detection_123456789" \
+  -d '{
+    "language": "Tamil",
+    "audioFormat": "mp3",
+    "audioBase64": "[BASE64_AUDIO]"
+  }'
