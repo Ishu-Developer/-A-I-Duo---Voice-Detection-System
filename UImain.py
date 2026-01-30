@@ -2,7 +2,6 @@
 import sys
 sys.path.insert(0, 'src')
 
-
 from fastapi import FastAPI, HTTPException, Header, UploadFile, File
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -16,23 +15,20 @@ import librosa
 import warnings
 warnings.filterwarnings('ignore')
 
-
 # ============================================
 # CONSTANTS & CONFIG
 # ============================================
 MODEL_PATH = "models/voice_detector.pkl"
 SCALER_PATH = "models/scaler.pkl"
-VALID_API_KEY = "sk_test_voice_detection_123456789"
+VALID_API_KEY = "voice_test_2026"  # 🔑 Updated API Key
 SUPPORTED_LANGUAGES = ["Tamil", "English", "Hindi", "Malayalam", "Telugu"]
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
-
 
 # ============================================
 # LOAD MODEL & SCALER
 # ============================================
 if not os.path.exists(MODEL_PATH):
     raise FileNotFoundError(f"Model not found: {MODEL_PATH}")
-
 
 try:
     model = joblib.load(MODEL_PATH)
@@ -41,29 +37,26 @@ except Exception as e:
     print(f"❌ Error loading model: {e}")
     model = None
 
-
-# Load scaler (नया)
+# Load scaler
 if os.path.exists(SCALER_PATH):
     try:
         scaler = joblib.load(SCALER_PATH)
         print(f"✅ Scaler loaded successfully from {SCALER_PATH}")
     except Exception as e:
-        print(f"⚠️  Scaler not found, will run without scaling: {e}")
+        print(f"⚠️  Scaler loading error: {e}")
         scaler = None
 else:
-    print(f"⚠️  Scaler not found at {SCALER_PATH}")
+    print(f"⚠️  Scaler not found at {SCALER_PATH}, running without scaling")
     scaler = None
-
 
 # ============================================
 # FASTAPI APP
 # ============================================
 app = FastAPI(
     title="A-I Duo Voice Detection API",
-    version="1.0.0",
+    version="2.0.0",
     description="Detect AI-generated vs Human voices in multiple languages"
 )
-
 
 # ============================================
 # DATA MODELS
@@ -73,14 +66,12 @@ class VoiceDetectionRequest(BaseModel):
     audioFormat: str
     audioBase64: str
 
-
 class VoiceDetectionResponse(BaseModel):
     status: str
     prediction: str
     confidence: float
     processing_time_ms: float
     request_id: str
-
 
 # ============================================
 # FEATURE EXTRACTION (Enhanced)
@@ -97,7 +88,7 @@ def extract_features(audio_data, sr=22050):
         # 1. MFCC (13 coefficients + 13 std)
         mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
         features.extend(np.mean(mfcc, axis=1))
-        features.extend(np.std(mfcc, axis=1))  # Enhanced
+        features.extend(np.std(mfcc, axis=1))
         
         # 2. Spectral Centroid (mean + std)
         spec_centroid = librosa.feature.spectral_centroid(y=y, sr=sr)
@@ -123,7 +114,7 @@ def extract_features(audio_data, sr=22050):
         features.append(np.mean(rms))
         features.append(np.std(rms))
         
-        # Ensure we have exactly 44 features
+        # Ensure exactly 44 features
         features = np.array(features)
         
         if len(features) < 44:
@@ -136,18 +127,17 @@ def extract_features(audio_data, sr=22050):
     except Exception as e:
         raise ValueError(f"Feature extraction failed: {str(e)}")
 
-
 # ============================================
 # API ENDPOINTS
 # ============================================
-
 
 @app.get("/")
 def root():
     """Root endpoint"""
     return {
         "message": "A-I Duo Voice Detection API",
-        "version": "1.0.0",
+        "version": "2.0.0",
+        "status": "online",
         "docs": "/docs",
         "endpoints": {
             "health": "GET /health",
@@ -156,17 +146,16 @@ def root():
         }
     }
 
-
 @app.get("/health")
 def health_check():
     """Health check endpoint"""
     return {
         "status": "ok",
         "model": "voice_detector_v2",
+        "model_loaded": model is not None,
         "scaler": "enabled" if scaler else "disabled",
         "supported_languages": SUPPORTED_LANGUAGES
     }
-
 
 @app.post("/api/voice-detection", response_model=VoiceDetectionResponse)
 def detect_voice(
@@ -179,10 +168,10 @@ def detect_voice(
     Detect if audio is AI-generated or Human voice
     
     Parameters:
-    - language: Tamil, English, Hindi, Malayalam, Telugu
-    - audioFormat: mp3, wav, ogg
+    - language: Tamil, English, Hindi, Malayalam, Telugu (case-insensitive)
+    - audioFormat: mp3, wav, ogg, flac, m4a
     - audioBase64: Base64 encoded audio file
-    - x-api-key: API authentication key
+    - x-api-key: API authentication key (Header)
     
     Returns:
     - prediction: AI_GENERATED or HUMAN
@@ -202,11 +191,13 @@ def detect_voice(
                 detail="Invalid API Key"
             )
         
-        # Validate language
-        if request.language not in SUPPORTED_LANGUAGES:
+        # 🔧 Case-insensitive language validation
+        language_normalized = request.language.strip().title()
+        
+        if language_normalized not in SUPPORTED_LANGUAGES:
             raise HTTPException(
                 status_code=400,
-                detail=f"Language not supported. Use: {SUPPORTED_LANGUAGES}"
+                detail=f"Language '{request.language}' not supported. Use: {SUPPORTED_LANGUAGES}"
             )
         
         # Decode Base64
@@ -221,7 +212,7 @@ def detect_voice(
         # Extract features
         features = extract_features(audio_bytes)
         
-        # Scale features (नया)
+        # Scale features
         if scaler:
             features_scaled = scaler.transform(features)
         else:
@@ -253,7 +244,6 @@ def detect_voice(
             detail=f"Processing failed: {str(e)}"
         )
 
-
 @app.post("/api/voice-detection-file", response_model=VoiceDetectionResponse)
 async def detect_voice_file(
     file: UploadFile = File(...),
@@ -266,9 +256,9 @@ async def detect_voice_file(
     Upload MP3/WAV/OGG file directly for detection
     
     Parameters:
-    - file: Audio file (MP3, WAV, OGG)
-    - language: Tamil, English, Hindi, Malayalam, Telugu
-    - x-api-key: API authentication key
+    - file: Audio file (MP3, WAV, OGG, FLAC, M4A)
+    - language: Tamil, English, Hindi, Malayalam, Telugu (case-insensitive)
+    - x-api-key: API authentication key (Header)
     
     Returns:
     - prediction: AI_GENERATED or HUMAN
@@ -288,11 +278,13 @@ async def detect_voice_file(
                 detail="Invalid API Key"
             )
         
-        # Validate language
-        if language not in SUPPORTED_LANGUAGES:
+        # 🔧 Case-insensitive language validation
+        language_normalized = language.strip().title()
+        
+        if language_normalized not in SUPPORTED_LANGUAGES:
             raise HTTPException(
                 status_code=400,
-                detail=f"Language not supported. Use: {SUPPORTED_LANGUAGES}"
+                detail=f"Language '{language}' not supported. Use: {SUPPORTED_LANGUAGES}"
             )
         
         # Validate file size
@@ -326,7 +318,7 @@ async def detect_voice_file(
         # Extract features
         features = extract_features(audio_bytes)
         
-        # Scale features (नया)
+        # Scale features
         if scaler:
             features_scaled = scaler.transform(features)
         else:
@@ -358,50 +350,48 @@ async def detect_voice_file(
             detail=f"Processing failed: {str(e)}"
         )
 
-
 # ============================================
 # STARTUP & SHUTDOWN
 # ============================================
 
-
 @app.on_event("startup")
 async def startup_event():
     print("\n" + "="*60)
-    print("🚀 A-I DUO VOICE DETECTION API STARTING")
+    print("🚀 A-I DUO VOICE DETECTION API v2.0 STARTING")
     print("="*60)
-    print(f"✅ Model loaded: {MODEL_PATH}")
+    print(f"✅ Model: {MODEL_PATH}")
+    print(f"✅ Model Status: {'Loaded' if model else 'Not Loaded'}")
     print(f"✅ Scaler: {'Enabled' if scaler else 'Disabled'}")
-    print(f"✅ Supported languages: {', '.join(SUPPORTED_LANGUAGES)}")
-    print(f"✅ API Key: {VALID_API_KEY}")
+    print(f"✅ Supported Languages: {', '.join(SUPPORTED_LANGUAGES)}")
+    print(f"🔑 API Key: {VALID_API_KEY}")
     print("="*60)
     print("\n📍 ENDPOINTS:")
-    print("  1. Base64 Method:  POST /api/voice-detection")
-    print("  2. File Upload:    POST /api/voice-detection-file")
-    print("  3. Health Check:   GET /health")
-    print("  4. Swagger UI:     /docs")
+    print("  1. Root:           GET  /")
+    print("  2. Health Check:   GET  /health")
+    print("  3. Base64 Method:  POST /api/voice-detection")
+    print("  4. File Upload:    POST /api/voice-detection-file")
+    print("  5. Swagger UI:     GET  /docs")
     print("="*60 + "\n")
-
 
 @app.on_event("shutdown")
 async def shutdown_event():
     print("\n" + "="*60)
-    print("API SHUTTING DOWN")
+    print("🛑 API SHUTTING DOWN")
     print("="*60 + "\n")
-
 
 # ============================================
 # MAIN - RAILWAY COMPATIBLE
 # ============================================
 
-
 if __name__ == "__main__":
-    # Get PORT from environment variable (Railway sets this)
+    # Get PORT from environment variable (Railway sets this automatically)
     port = int(os.getenv("PORT", 8000))
     
-    print("🚀 Starting A-I Duo Voice Detection API...")
+    print("🚀 Starting A-I Duo Voice Detection API v2.0...")
+    print(f"📍 Host: 0.0.0.0")
     print(f"📍 Port: {port}")
-    print("📚 Docs: /docs")
-    print("🔑 Use API Key: sk_test_voice_detection_123456789")
+    print(f"📚 Docs: /docs")
+    print(f"🔑 API Key: {VALID_API_KEY}")
     
     uvicorn.run(
         app,
