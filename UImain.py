@@ -3,7 +3,7 @@ import sys
 sys.path.insert(0, 'src')
 
 from fastapi import FastAPI, HTTPException, Header, UploadFile, File
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse  # ✅ Added HTMLResponse
 from pydantic import BaseModel
 import uvicorn
 import os
@@ -135,30 +135,53 @@ def extract_features(audio_data, sr=22050):
 # API ENDPOINTS
 # ============================================
 
-@app.get("/")
-def root():
-    """Root endpoint"""
-    return {
-        "message": "A-I Duo Voice Detection API",
-        "version": "2.0.0",
-        "status": "online",
-        "docs": "/docs",
-        "endpoints": {
-            "health": "GET /health",
-            "detect_with_base64": "POST /api/voice-detection",
-            "detect_with_file": "POST /api/voice-detection-file"
-        }
-    }
+# ✅ FRONTEND ROUTE (Moved to correct location - AFTER app creation)
+@app.get("/", response_class=HTMLResponse)
+async def serve_frontend():
+    """Serve the frontend HTML dashboard"""
+    try:
+        if os.path.exists("index.html"):
+            with open("index.html", "r", encoding="utf-8") as f:
+                return HTMLResponse(content=f.read())
+        else:
+            return HTMLResponse(
+                content="""
+                <html>
+                <head><title>Frontend Not Found</title></head>
+                <body style="font-family: Arial; padding: 40px; text-align: center;">
+                    <h1>⚠️ Frontend Dashboard Not Found</h1>
+                    <p>The index.html file is missing from the deployment.</p>
+                    <p><a href="/docs">Visit API Documentation</a></p>
+                </body>
+                </html>
+                """,
+                status_code=404
+            )
+    except Exception as e:
+        return HTMLResponse(
+            content=f"""
+            <html>
+            <head><title>Error</title></head>
+            <body style="font-family: Arial; padding: 40px; text-align: center;">
+                <h1>❌ Error Loading Frontend</h1>
+                <p>Error: {str(e)}</p>
+                <p><a href="/docs">Visit API Documentation</a></p>
+            </body>
+            </html>
+            """,
+            status_code=500
+        )
 
 @app.get("/health")
 def health_check():
     """Health check endpoint"""
     return {
-        "status": "ok",
+        "status": "healthy",
         "model": "voice_detector_v2",
         "model_loaded": model is not None,
-        "scaler": "enabled" if scaler else "disabled",
-        "supported_languages": SUPPORTED_LANGUAGES
+        "scaler_enabled": scaler is not None,
+        "languages_supported": SUPPORTED_LANGUAGES,
+        "version": "2.0.0"
     }
 
 @app.post("/api/voice-detection", response_model=VoiceDetectionResponse)
@@ -370,7 +393,7 @@ async def startup_event():
     print(f"🔑 API Key: {VALID_API_KEY}")
     print("="*60)
     print("\n📍 ENDPOINTS:")
-    print("  1. Root:           GET  /")
+    print("  1. Frontend:       GET  /")
     print("  2. Health Check:   GET  /health")
     print("  3. Base64 Method:  POST /api/voice-detection")
     print("  4. File Upload:    POST /api/voice-detection-file")
