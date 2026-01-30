@@ -3,7 +3,7 @@ import sys
 sys.path.insert(0, 'src')
 
 from fastapi import FastAPI, HTTPException, Header, UploadFile, File
-from fastapi.responses import JSONResponse, HTMLResponse  # ✅ Added HTMLResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from pydantic import BaseModel
 import uvicorn
 import os
@@ -13,6 +13,7 @@ import joblib
 import numpy as np
 import librosa
 import warnings
+import traceback
 warnings.filterwarnings('ignore')
 
 # ============================================
@@ -20,41 +21,81 @@ warnings.filterwarnings('ignore')
 # ============================================
 MODEL_PATH = "models/voice_detector.pkl"
 SCALER_PATH = "models/scaler.pkl"
-VALID_API_KEY = "voice_test_2026"  # 🔑 Updated API Key
+VALID_API_KEY = "voice_test_2026"
 SUPPORTED_LANGUAGES = ["Tamil", "English", "Hindi", "Malayalam", "Telugu"]
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
 # ============================================
-# LOAD MODEL & SCALER
+# LOAD MODEL & SCALER (ENHANCED WITH DEBUGGING)
 # ============================================
-if not os.path.exists(MODEL_PATH):
-    raise FileNotFoundError(f"Model not found: {MODEL_PATH}")
+print("\n" + "="*60)
+print("🔍 LOADING MODEL AND SCALER")
+print("="*60)
 
+# Debug: Show current directory and files
+print(f"📂 Current directory: {os.getcwd()}")
+print(f"📂 Files in current directory: {os.listdir('.')}")
+if os.path.exists('models'):
+    print(f"📂 Files in models/: {os.listdir('models')}")
+else:
+    print("⚠️  WARNING: 'models' directory not found!")
+
+# Check if model file exists
+if not os.path.exists(MODEL_PATH):
+    print(f"❌ CRITICAL ERROR: Model file not found at {MODEL_PATH}")
+    print(f"   Expected path: {os.path.abspath(MODEL_PATH)}")
+    raise FileNotFoundError(f"Model not found: {MODEL_PATH}")
+else:
+    print(f"✅ Model file found: {MODEL_PATH}")
+
+# Load model with comprehensive error handling
+model = None
 try:
+    print(f"   Loading model...")
     model = joblib.load(MODEL_PATH)
-    print(f"✅ Model loaded successfully from {MODEL_PATH}")
+    print(f"✅ Model loaded successfully!")
+    print(f"   Model type: {type(model)}")
+    print(f"   Model has predict: {hasattr(model, 'predict')}")
+    print(f"   Model has predict_proba: {hasattr(model, 'predict_proba')}")
 except Exception as e:
-    print(f"❌ Error loading model: {e}")
+    print(f"❌ CRITICAL: Error loading model!")
+    print(f"   Exception: {e}")
+    print(f"   Exception type: {type(e).__name__}")
+    traceback.print_exc()
     model = None
 
 # Load scaler
+scaler = None
 if os.path.exists(SCALER_PATH):
     try:
+        print(f"   Loading scaler...")
         scaler = joblib.load(SCALER_PATH)
-        print(f"✅ Scaler loaded successfully from {SCALER_PATH}")
+        print(f"✅ Scaler loaded successfully!")
+        print(f"   Scaler type: {type(scaler)}")
     except Exception as e:
-        print(f"⚠️  Scaler loading error: {e}")
+        print(f"⚠️  Warning: Scaler loading error: {e}")
         scaler = None
 else:
-    print(f"⚠️  Scaler not found at {SCALER_PATH}, running without scaling")
-    scaler = None
+    print(f"⚠️  Scaler not found at {SCALER_PATH}, continuing without scaler")
+
+print("="*60)
+print(f"📊 Final Status:")
+print(f"   Model loaded: {model is not None}")
+print(f"   Scaler loaded: {scaler is not None}")
+print("="*60 + "\n")
+
+# Validate model is not None before starting server
+if model is None:
+    print("❌ CRITICAL: Model failed to load!")
+    print("   The application CANNOT start without a valid model.")
+    raise RuntimeError("Model loading failed - application cannot start")
 
 # ============================================
 # FASTAPI APP
 # ============================================
 app = FastAPI(
     title="A-I Duo Voice Detection API",
-    version="2.0.0",
+    version="2.0.1",
     description="Detect AI-generated vs Human voices in multiple languages"
 )
 
@@ -79,9 +120,9 @@ class VoiceDetectionResponse(BaseModel):
 def extract_features(audio_data, sr=22050):
     """Extract 44 enhanced features from audio"""
     try:
-        # 🔧 FIX: Create BytesIO object and reset pointer
+        # Create BytesIO object and reset pointer
         audio_buffer = io.BytesIO(audio_data)
-        audio_buffer.seek(0)  # Critical: Reset to start
+        audio_buffer.seek(0)
         
         # Load audio from BytesIO buffer
         y, sr = librosa.load(audio_buffer, sr=sr, duration=3)
@@ -135,7 +176,6 @@ def extract_features(audio_data, sr=22050):
 # API ENDPOINTS
 # ============================================
 
-# ✅ FRONTEND ROUTE (Moved to correct location - AFTER app creation)
 @app.get("/", response_class=HTMLResponse)
 async def serve_frontend():
     """Serve the frontend HTML dashboard"""
@@ -151,7 +191,7 @@ async def serve_frontend():
                 <body style="font-family: Arial; padding: 40px; text-align: center;">
                     <h1>⚠️ Frontend Dashboard Not Found</h1>
                     <p>The index.html file is missing from the deployment.</p>
-                    <p><a href="/docs">Visit API Documentation</a></p>
+                    <p><a href="/docs" style="color: #3b82f6; text-decoration: none;">Visit API Documentation</a></p>
                 </body>
                 </html>
                 """,
@@ -165,7 +205,7 @@ async def serve_frontend():
             <body style="font-family: Arial; padding: 40px; text-align: center;">
                 <h1>❌ Error Loading Frontend</h1>
                 <p>Error: {str(e)}</p>
-                <p><a href="/docs">Visit API Documentation</a></p>
+                <p><a href="/docs" style="color: #3b82f6; text-decoration: none;">Visit API Documentation</a></p>
             </body>
             </html>
             """,
@@ -176,12 +216,12 @@ async def serve_frontend():
 def health_check():
     """Health check endpoint"""
     return {
-        "status": "healthy",
+        "status": "healthy" if model is not None else "degraded",
         "model": "voice_detector_v2",
         "model_loaded": model is not None,
         "scaler_enabled": scaler is not None,
         "languages_supported": SUPPORTED_LANGUAGES,
-        "version": "2.0.0"
+        "version": "2.0.1"
     }
 
 @app.post("/api/voice-detection", response_model=VoiceDetectionResponse)
@@ -193,17 +233,6 @@ def detect_voice(
     METHOD 1: Base64 Encoded Audio
     
     Detect if audio is AI-generated or Human voice
-    
-    Parameters:
-    - language: Tamil, English, Hindi, Malayalam, Telugu (case-insensitive)
-    - audioFormat: mp3, wav, ogg, flac, m4a
-    - audioBase64: Base64 encoded audio file
-    - x-api-key: API authentication key (Header)
-    
-    Returns:
-    - prediction: AI_GENERATED or HUMAN
-    - confidence: 0.0 to 1.0
-    - processing_time_ms: Processing duration
     """
     
     import time
@@ -211,6 +240,13 @@ def detect_voice(
     request_id = base64.b64encode(os.urandom(12)).decode('utf-8')
     
     try:
+        # ✅ Model validation check
+        if model is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Model not loaded. Service temporarily unavailable."
+            )
+        
         # Validate API Key
         if x_api_key != VALID_API_KEY:
             raise HTTPException(
@@ -218,7 +254,7 @@ def detect_voice(
                 detail="Invalid API Key"
             )
         
-        # 🔧 Case-insensitive language validation
+        # Case-insensitive language validation
         language_normalized = request.language.strip().title()
         
         if language_normalized not in SUPPORTED_LANGUAGES:
@@ -281,16 +317,6 @@ async def detect_voice_file(
     METHOD 2: Direct File Upload
     
     Upload MP3/WAV/OGG file directly for detection
-    
-    Parameters:
-    - file: Audio file (MP3, WAV, OGG, FLAC, M4A)
-    - language: Tamil, English, Hindi, Malayalam, Telugu (case-insensitive)
-    - x-api-key: API authentication key (Header)
-    
-    Returns:
-    - prediction: AI_GENERATED or HUMAN
-    - confidence: 0.0 to 1.0
-    - processing_time_ms: Processing duration
     """
     
     import time
@@ -298,6 +324,13 @@ async def detect_voice_file(
     request_id = base64.b64encode(os.urandom(12)).decode('utf-8')
     
     try:
+        # ✅ Model validation check
+        if model is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Model not loaded. Service temporarily unavailable."
+            )
+        
         # Validate API Key
         if x_api_key != VALID_API_KEY:
             raise HTTPException(
@@ -305,7 +338,7 @@ async def detect_voice_file(
                 detail="Invalid API Key"
             )
         
-        # 🔧 Case-insensitive language validation
+        # Case-insensitive language validation
         language_normalized = language.strip().title()
         
         if language_normalized not in SUPPORTED_LANGUAGES:
@@ -384,11 +417,11 @@ async def detect_voice_file(
 @app.on_event("startup")
 async def startup_event():
     print("\n" + "="*60)
-    print("🚀 A-I DUO VOICE DETECTION API v2.0 STARTING")
+    print("🚀 A-I DUO VOICE DETECTION API v2.0.1 STARTING")
     print("="*60)
     print(f"✅ Model: {MODEL_PATH}")
-    print(f"✅ Model Status: {'Loaded' if model else 'Not Loaded'}")
-    print(f"✅ Scaler: {'Enabled' if scaler else 'Disabled'}")
+    print(f"✅ Model Status: {'Loaded ✓' if model else 'Not Loaded ✗'}")
+    print(f"✅ Scaler: {'Enabled ✓' if scaler else 'Disabled ✗'}")
     print(f"✅ Supported Languages: {', '.join(SUPPORTED_LANGUAGES)}")
     print(f"🔑 API Key: {VALID_API_KEY}")
     print("="*60)
@@ -414,7 +447,7 @@ if __name__ == "__main__":
     # Get PORT from environment variable (Railway sets this automatically)
     port = int(os.getenv("PORT", 8000))
     
-    print("🚀 Starting A-I Duo Voice Detection API v2.0...")
+    print("🚀 Starting A-I Duo Voice Detection API v2.0.1...")
     print(f"📍 Host: 0.0.0.0")
     print(f"📍 Port: {port}")
     print(f"📚 Docs: /docs")
