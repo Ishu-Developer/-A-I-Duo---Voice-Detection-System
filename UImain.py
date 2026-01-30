@@ -2,6 +2,7 @@
 import sys
 sys.path.insert(0, 'src')
 
+
 from fastapi import FastAPI, HTTPException, Header, UploadFile, File
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -15,6 +16,7 @@ import librosa
 import warnings
 warnings.filterwarnings('ignore')
 
+
 # ============================================
 # CONSTANTS & CONFIG
 # ============================================
@@ -24,11 +26,13 @@ VALID_API_KEY = "sk_test_voice_detection_123456789"
 SUPPORTED_LANGUAGES = ["Tamil", "English", "Hindi", "Malayalam", "Telugu"]
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
+
 # ============================================
 # LOAD MODEL & SCALER
 # ============================================
 if not os.path.exists(MODEL_PATH):
     raise FileNotFoundError(f"Model not found: {MODEL_PATH}")
+
 
 try:
     model = joblib.load(MODEL_PATH)
@@ -36,6 +40,7 @@ try:
 except Exception as e:
     print(f"❌ Error loading model: {e}")
     model = None
+
 
 # Load scaler (नया)
 if os.path.exists(SCALER_PATH):
@@ -49,6 +54,7 @@ else:
     print(f"⚠️  Scaler not found at {SCALER_PATH}")
     scaler = None
 
+
 # ============================================
 # FASTAPI APP
 # ============================================
@@ -58,6 +64,7 @@ app = FastAPI(
     description="Detect AI-generated vs Human voices in multiple languages"
 )
 
+
 # ============================================
 # DATA MODELS
 # ============================================
@@ -66,12 +73,14 @@ class VoiceDetectionRequest(BaseModel):
     audioFormat: str
     audioBase64: str
 
+
 class VoiceDetectionResponse(BaseModel):
     status: str
     prediction: str
     confidence: float
     processing_time_ms: float
     request_id: str
+
 
 # ============================================
 # FEATURE EXTRACTION (Enhanced)
@@ -127,9 +136,11 @@ def extract_features(audio_data, sr=22050):
     except Exception as e:
         raise ValueError(f"Feature extraction failed: {str(e)}")
 
+
 # ============================================
 # API ENDPOINTS
 # ============================================
+
 
 @app.get("/")
 def root():
@@ -137,13 +148,14 @@ def root():
     return {
         "message": "A-I Duo Voice Detection API",
         "version": "1.0.0",
-        "docs": "http://localhost:8000/docs",
+        "docs": "/docs",
         "endpoints": {
             "health": "GET /health",
             "detect_with_base64": "POST /api/voice-detection",
             "detect_with_file": "POST /api/voice-detection-file"
         }
     }
+
 
 @app.get("/health")
 def health_check():
@@ -154,6 +166,7 @@ def health_check():
         "scaler": "enabled" if scaler else "disabled",
         "supported_languages": SUPPORTED_LANGUAGES
     }
+
 
 @app.post("/api/voice-detection", response_model=VoiceDetectionResponse)
 def detect_voice(
@@ -239,6 +252,7 @@ def detect_voice(
             status_code=500,
             detail=f"Processing failed: {str(e)}"
         )
+
 
 @app.post("/api/voice-detection-file", response_model=VoiceDetectionResponse)
 async def detect_voice_file(
@@ -344,9 +358,11 @@ async def detect_voice_file(
             detail=f"Processing failed: {str(e)}"
         )
 
+
 # ============================================
 # STARTUP & SHUTDOWN
 # ============================================
+
 
 @app.on_event("startup")
 async def startup_event():
@@ -362,8 +378,9 @@ async def startup_event():
     print("  1. Base64 Method:  POST /api/voice-detection")
     print("  2. File Upload:    POST /api/voice-detection-file")
     print("  3. Health Check:   GET /health")
-    print("  4. Swagger UI:     http://localhost:8000/docs")
+    print("  4. Swagger UI:     /docs")
     print("="*60 + "\n")
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -371,19 +388,24 @@ async def shutdown_event():
     print("API SHUTTING DOWN")
     print("="*60 + "\n")
 
+
 # ============================================
-# MAIN
+# MAIN - RAILWAY COMPATIBLE
 # ============================================
 
+
 if __name__ == "__main__":
+    # Get PORT from environment variable (Railway sets this)
+    port = int(os.getenv("PORT", 8000))
+    
     print("🚀 Starting A-I Duo Voice Detection API...")
-    print("📍 Local: http://localhost:8000")
-    print("📚 Docs: http://localhost:8000/docs")
+    print(f"📍 Port: {port}")
+    print("📚 Docs: /docs")
     print("🔑 Use API Key: sk_test_voice_detection_123456789")
     
     uvicorn.run(
         app,
         host="0.0.0.0",
-        port=8000,
+        port=port,
         log_level="info"
     )
