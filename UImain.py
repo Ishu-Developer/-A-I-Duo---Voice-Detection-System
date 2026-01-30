@@ -74,13 +74,17 @@ class VoiceDetectionResponse(BaseModel):
     request_id: str
 
 # ============================================
-# FEATURE EXTRACTION (Enhanced)
+# FEATURE EXTRACTION (Enhanced + FIXED)
 # ============================================
 def extract_features(audio_data, sr=22050):
     """Extract 44 enhanced features from audio"""
     try:
-        # Load audio from bytes
-        y, sr = librosa.load(io.BytesIO(audio_data), sr=sr, duration=3)
+        # 🔧 FIX: Create BytesIO object and reset pointer
+        audio_buffer = io.BytesIO(audio_data)
+        audio_buffer.seek(0)  # Critical: Reset to start
+        
+        # Load audio from BytesIO buffer
+        y, sr = librosa.load(audio_buffer, sr=sr, duration=3)
         
         # Extract features
         features = []
