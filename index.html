@@ -61,6 +61,8 @@
         }
 
         input[type="file"],
+        input[type="text"],
+        input[type="password"],
         select {
             width: 100%;
             padding: 12px 15px;
@@ -87,10 +89,45 @@
         }
 
         input[type="file"]:focus,
+        input[type="text"]:focus,
+        input[type="password"]:focus,
         select:focus {
             outline: none;
             border-color: #667eea;
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .api-key-group {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            margin-bottom: 20px;
+        }
+
+        .api-key-input-wrapper {
+            position: relative;
+        }
+
+        .api-key-input-wrapper input {
+            padding-right: 50px;
+        }
+
+        .toggle-visibility {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1.2em;
+            color: #667eea;
+            padding: 5px;
+        }
+
+        .toggle-visibility:hover {
+            color: #764ba2;
         }
 
         .button-group {
@@ -292,32 +329,6 @@
             opacity: 0.9;
         }
 
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-
-        .stat-box {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 20px;
-            border-radius: 10px;
-            text-align: center;
-        }
-
-        .stat-box h4 {
-            opacity: 0.9;
-            margin-bottom: 5px;
-            font-size: 0.9em;
-        }
-
-        .stat-box .value {
-            font-size: 1.8em;
-            font-weight: bold;
-        }
-
         @media (max-width: 600px) {
             header h1 {
                 font-size: 1.8em;
@@ -348,6 +359,27 @@
         <!-- Main Form -->
         <div class="main-card">
             <form id="detectionForm">
+                <div class="api-key-group">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label for="apiKey">🔑 API Key</label>
+                        <div class="api-key-input-wrapper">
+                            <input 
+                                type="password" 
+                                id="apiKey" 
+                                placeholder="Enter your API key"
+                                value="voice_test_2026"
+                                required
+                            >
+                            <button type="button" class="toggle-visibility" onclick="toggleApiKeyVisibility()">
+                                👁️
+                            </button>
+                        </div>
+                        <small style="color: #666; margin-top: 5px; display: block;">
+                            Default: voice_test_2026 (pre-filled for testing)
+                        </small>
+                    </div>
+                </div>
+
                 <div class="form-group">
                     <label for="audioFile">📁 Select Audio File</label>
                     <input 
@@ -434,15 +466,29 @@
     <script>
         // Configuration
         const API_URL = "https://a-i-duo-voice-detection-system-production.up.railway.app";
-        const API_KEY = "voice_test_2026";
 
         // DOM Elements
         const form = document.getElementById('detectionForm');
+        const apiKeyInput = document.getElementById('apiKey');
         const audioFile = document.getElementById('audioFile');
         const language = document.getElementById('language');
         const detectBtn = document.getElementById('detectBtn');
         const statusMessage = document.getElementById('statusMessage');
         const resultCard = document.getElementById('resultCard');
+
+        // Toggle API key visibility
+        function toggleApiKeyVisibility() {
+            const input = document.getElementById('apiKey');
+            const button = event.target;
+            
+            if (input.type === 'password') {
+                input.type = 'text';
+                button.textContent = '🙈';
+            } else {
+                input.type = 'password';
+                button.textContent = '👁️';
+            }
+        }
 
         // Event Listeners
         form.addEventListener('submit', handleDetection);
@@ -450,7 +496,7 @@
 
         // Show status message
         function showStatus(message, type) {
-            statusMessage.textContent = message;
+            statusMessage.innerHTML = message;
             statusMessage.className = `status-message show ${type}`;
             
             if (type === 'success') {
@@ -490,8 +536,14 @@
 
             const file = audioFile.files[0];
             const lang = language.value;
+            const apiKey = apiKeyInput.value.trim();
 
             // Validation
+            if (!apiKey) {
+                showStatus('❌ Please enter an API key!', 'error');
+                return;
+            }
+
             if (!file || !lang) {
                 showStatus('❌ Please select both file and language!', 'error');
                 return;
@@ -512,7 +564,7 @@
                     {
                         method: 'POST',
                         headers: {
-                            'x-api-key': API_KEY
+                            'x-api-key': apiKey
                         },
                         body: formData
                     }
